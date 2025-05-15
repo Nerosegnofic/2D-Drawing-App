@@ -5,8 +5,7 @@
 
 using std::array, std::clamp, std::vector;
 
-class Point {
-public:
+struct Point {
     float x, y;
     COLORREF color;
 
