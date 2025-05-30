@@ -1,5 +1,4 @@
 #define UNICODE
-#define UNICODE
 
 #include <Windows.h>
 #include <cmath>
