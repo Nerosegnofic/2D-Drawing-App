@@ -129,6 +129,96 @@ void DrawParametricLine(HDC hdc, POINT p1, POINT p2, COLORREF color) {
     }
 }
 
+void Draw8Points(HDC hdc, POINT center, int x, int y, COLORREF color) {
+    SetPixel(hdc, center.x + x, center.y + y, color);
+    SetPixel(hdc, center.x - x, center.y + y, color);
+    SetPixel(hdc, center.x + x, center.y - y, color);
+    SetPixel(hdc, center.x - x, center.y - y, color);
+    SetPixel(hdc, center.x + y, center.y + x, color);
+    SetPixel(hdc, center.x - y, center.y + x, color);
+    SetPixel(hdc, center.x + y, center.y - x, color);
+    SetPixel(hdc, center.x - y, center.y - x, color);
+}
+
+// Direct Circle Algorithm (using Draw8Points)
+void DrawDirectCircle(HDC hdc, POINT center, int radius, COLORREF color) {
+    int x = 0, y = radius;
+    int radiusSq = radius * radius;
+    
+    while (x <= y) {
+        Draw8Points(hdc, center, x, y, color);
+        x++;
+        y = round(sqrt(radiusSq - x * x));
+    }
+}
+
+// Polar Circle Algorithm (using Draw8Points)
+void DrawPolarCircle(HDC hdc, POINT center, int radius, COLORREF color) {
+    double dtheta = 1.0 / radius;
+    for (double theta = 0; theta <= M_PI/4; theta += dtheta) {
+        int x = round(radius * cos(theta));
+        int y = round(radius * sin(theta));
+        Draw8Points(hdc, center, x, y, color);
+    }
+}
+
+// Iterative Polar Circle Algorithm (using Draw8Points)
+void DrawIterativePolarCircle(HDC hdc, POINT center, int radius, COLORREF color) {
+    double x = radius, y = 0;
+    double dtheta = 1.0 / radius;
+    double cdtheta = cos(dtheta), sdtheta = sin(dtheta);
+    
+    while (x >= y) {
+        Draw8Points(hdc, center, round(x), round(y), color);
+        
+        // Rotate point
+        double x_new = x * cdtheta - y * sdtheta;
+        y = x * sdtheta + y * cdtheta;
+        x = x_new;
+    }
+}
+
+// Midpoint Circle Algorithm (using Draw8Points)
+void DrawMidpointCircle(HDC hdc, POINT center, int radius, COLORREF color) {
+    int x = 0, y = radius;
+    int d = 1 - radius;
+    
+    while (x <= y) {
+        Draw8Points(hdc, center, x, y, color);
+        
+        if (d < 0) {
+            d += 2 * x + 3;
+        } else {
+            d += 2 * (x - y) + 5;
+            y--;
+        }
+        x++;
+    }
+}
+
+// Modified Midpoint Circle Algorithm (using Draw8Points)
+void DrawModifiedMidpointCircle(HDC hdc, POINT center, int radius, COLORREF color) {
+    int x = 0, y = radius;
+    int d = 1 - radius;
+    int d1 = 3;
+    int d2 = -2 * radius + 5;
+    
+    while (x <= y) {
+        Draw8Points(hdc, center, x, y, color);
+        if (d < 0) {
+            d += d1;
+            d1 += 2;
+            d2 += 2;
+        } else {
+            d += d2;
+            d1 += 2;
+            d2 += 4;
+            y--;
+        }
+        x++;
+    }
+}
+
 // Save screen content using BitBlt and file dialog
 void SaveScreenToFile(HWND hwnd) {
     HDC hdcScreen = GetDC(hwnd);
@@ -424,7 +514,38 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             ReleaseDC(hwnd, hdc);
             pointCount = 0; // Reset points for next shape
-        }
+        } else if (pointCount == 2 && 
+            (currentAlgorithm == ID_DIRECT_CIRCLE ||
+            currentAlgorithm == ID_POLAR_CIRCLE ||
+            currentAlgorithm == ID_ITER_POLAR_CIRCLE ||
+            currentAlgorithm == ID_MIDPOINT_CIRCLE ||
+            currentAlgorithm == ID_MOD_MIDPOINT_CIRCLE)) {
+                HDC hdc = GetDC(hwnd);
+                int radius = static_cast<int>(sqrt(
+                    pow(points[1].x - points[0].x, 2) + 
+                    pow(points[1].y - points[0].y, 2)
+                ));
+                
+                switch (currentAlgorithm) {
+                    case ID_DIRECT_CIRCLE:
+                        DrawDirectCircle(hdc, points[0], radius, currentColor);
+                        break;
+                    case ID_POLAR_CIRCLE:
+                        DrawPolarCircle(hdc, points[0], radius, currentColor);
+                        break;
+                    case ID_ITER_POLAR_CIRCLE:
+                        DrawIterativePolarCircle(hdc, points[0], radius, currentColor);
+                        break;
+                    case ID_MIDPOINT_CIRCLE:
+                        DrawMidpointCircle(hdc, points[0], radius, currentColor);
+                        break;
+                    case ID_MOD_MIDPOINT_CIRCLE:
+                        DrawModifiedMidpointCircle(hdc, points[0], radius, currentColor);
+                        break;
+                }
+                ReleaseDC(hwnd, hdc);
+                pointCount = 0;
+    }
 
         //TODO: Add the other algorithms.
         
