@@ -1206,17 +1206,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case ID_CLIP_RECT_LINE:
         case ID_CLIP_RECT_POLYGON:
         case ID_CLIP_SQUARE_POINT:
-        case ID_CLIP_SQUARE_LINE:
-                pointCount = 0;
-                currentAlgorithm = LOWORD(wParam);
-                if (currentAlgorithm == ID_CLIP_SQUARE_POINT || currentAlgorithm == ID_CLIP_SQUARE_LINE) {
-                    InvalidateRect(hwnd, nullptr, TRUE);
-                    InitializeSquareClipWindow(hwnd);
-                } else if (currentAlgorithm == ID_CLIP_RECT_POINT || currentAlgorithm == ID_CLIP_RECT_LINE || currentAlgorithm == ID_CLIP_RECT_POLYGON) {
-                    InvalidateRect(hwnd, nullptr, TRUE);
-                    InitializeRectClipWindow(hwnd);
-                }
-                break;
+        case ID_CLIP_SQUARE_LINE: {
+            pointCount = 0;
+            int previousAlgorithm = currentAlgorithm;
+            currentAlgorithm = LOWORD(wParam);
+
+            if (previousAlgorithm == ID_CLIP_SQUARE_POINT || previousAlgorithm == ID_CLIP_SQUARE_LINE || previousAlgorithm == ID_CLIP_RECT_POINT || previousAlgorithm == ID_CLIP_RECT_LINE || previousAlgorithm == ID_CLIP_RECT_POLYGON) {
+                InvalidateRect(hwnd, nullptr, TRUE);
+            }
+
+            if (currentAlgorithm == ID_CLIP_SQUARE_POINT || currentAlgorithm == ID_CLIP_SQUARE_LINE) {
+                InvalidateRect(hwnd, nullptr, TRUE);
+                InitializeSquareClipWindow(hwnd);
+            } else if (currentAlgorithm == ID_CLIP_RECT_POINT || currentAlgorithm == ID_CLIP_RECT_LINE || currentAlgorithm == ID_CLIP_RECT_POLYGON) {
+                InvalidateRect(hwnd, nullptr, TRUE);
+                InitializeRectClipWindow(hwnd);
+            }
+
+            break;
+        }
 
         case ID_CLEAR_SCREEN:
             pointCount = 0;
