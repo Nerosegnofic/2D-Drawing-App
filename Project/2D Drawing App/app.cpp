@@ -309,6 +309,90 @@ void ClipLineRect(HDC hdc, POINT p1, POINT p2, COLORREF color) {
     }
 }
 
+vector<POINT> ClipPolygonAgainstEdge(const vector<POINT>& inputVertices, int edgeType, int edgeValue) {
+    vector<POINT> outputVertices;
+
+    if (inputVertices.empty()) return outputVertices;
+
+    POINT prevVertex = inputVertices.back();
+
+    for (const POINT& currentVertex : inputVertices) {
+        bool currentInside = false;
+        bool prevInside = false;
+
+        // Determine if vertices are inside based on edge type
+        switch (edgeType) {
+            case 0: // Left edge
+                currentInside = (currentVertex.x >= edgeValue);
+                prevInside = (prevVertex.x >= edgeValue);
+                break;
+            case 1: // Right edge
+                currentInside = (currentVertex.x <= edgeValue);
+                prevInside = (prevVertex.x <= edgeValue);
+                break;
+            case 2: // Bottom edge
+                currentInside = (currentVertex.y >= edgeValue);
+                prevInside = (prevVertex.y >= edgeValue);
+                break;
+            case 3: // Top edge
+                currentInside = (currentVertex.y <= edgeValue);
+                prevInside = (prevVertex.y <= edgeValue);
+                break;
+        }
+
+        if (currentInside) {
+            if (!prevInside) {
+                // Entering: add intersection point
+                POINT intersection;
+                if (edgeType == 0 || edgeType == 1) { // Vertical edges
+                    intersection = VIntersect(prevVertex, currentVertex, edgeValue);
+                } else { // Horizontal edges
+                    intersection = HIntersect(prevVertex, currentVertex, edgeValue);
+                }
+                outputVertices.push_back(intersection);
+            }
+            // Add current vertex
+            outputVertices.push_back(currentVertex);
+        } else if (prevInside) {
+            // Exiting: add intersection point
+            POINT intersection;
+            if (edgeType == 0 || edgeType == 1) { // Vertical edges
+                intersection = VIntersect(prevVertex, currentVertex, edgeValue);
+            } else { // Horizontal edges
+                intersection = HIntersect(prevVertex, currentVertex, edgeValue);
+            }
+            outputVertices.push_back(intersection);
+        }
+
+        prevVertex = currentVertex;
+    }
+
+    return outputVertices;
+}
+
+void ClipPolygonRect(HDC hdc, POINT* vertices, int vertexCount, COLORREF color) {
+    if (vertexCount < 3) return; // Need at least 3 vertices for a polygon
+
+    // Convert to vector for easier manipulation
+    vector<POINT> clippedVertices(vertices, vertices + vertexCount);
+
+    // Clip against each edge of the rectangle in order: left, right, bottom, top
+    clippedVertices = ClipPolygonAgainstEdge(clippedVertices, 0, rectClipWindow.left);   // Left edge
+    clippedVertices = ClipPolygonAgainstEdge(clippedVertices, 1, rectClipWindow.right);  // Right edge
+    clippedVertices = ClipPolygonAgainstEdge(clippedVertices, 2, rectClipWindow.top);    // Bottom edge
+    clippedVertices = ClipPolygonAgainstEdge(clippedVertices, 3, rectClipWindow.bottom); // Top edge
+
+    // Draw the clipped polygon
+    if (clippedVertices.size() >= 3) {
+        // Draw polygon outline
+        for (size_t i = 0; i < clippedVertices.size(); i++) {
+            POINT p1 = clippedVertices[i];
+            POINT p2 = clippedVertices[(i + 1) % clippedVertices.size()];
+            DrawDDALine(hdc, p1, p2, color);
+        }
+    }
+}
+
 // Midpoint Line Algorithm
 void DrawMidpointLine(HDC hdc, POINT p1, POINT p2, COLORREF color) {
     int dx = p2.x - p1.x;
@@ -1128,7 +1212,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (currentAlgorithm == ID_CLIP_SQUARE_POINT || currentAlgorithm == ID_CLIP_SQUARE_LINE) {
                     InvalidateRect(hwnd, nullptr, TRUE);
                     InitializeSquareClipWindow(hwnd);
-                } else if (currentAlgorithm == ID_CLIP_RECT_POINT || currentAlgorithm == ID_CLIP_RECT_LINE) {
+                } else if (currentAlgorithm == ID_CLIP_RECT_POINT || currentAlgorithm == ID_CLIP_RECT_LINE || currentAlgorithm == ID_CLIP_RECT_POLYGON) {
                     InvalidateRect(hwnd, nullptr, TRUE);
                     InitializeRectClipWindow(hwnd);
                 }
@@ -1317,7 +1401,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             ReleaseDC(hwnd, hdc);
             pointCount = 0;
         }
-        //TODO: Add the other algorithms.
 
         break;
     }
@@ -1337,6 +1420,28 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         } else if (pointCount > 0 && currentAlgorithm == ID_CARDINAL_SPLINE) {
             HDC hdc = GetDC(hwnd);
             drawCardinalSpline(hdc, vector<POINT>(points, points + pointCount), 0.5f, currentColor);
+            ReleaseDC(hwnd, hdc);
+            pointCount = 0;
+        } else if (pointCount >= 3 && currentAlgorithm == ID_CLIP_RECT_POLYGON) {
+            HDC hdc = GetDC(hwnd);
+
+            // Draw original polygon in light gray first
+            HPEN grayPen = CreatePen(PS_SOLID, 1, RGB(192, 192, 192));
+            HPEN oldPen = (HPEN)SelectObject(hdc, grayPen);
+
+            for (int i = 0; i < pointCount; i++) {
+                POINT p1 = points[i];
+                POINT p2 = points[(i + 1) % pointCount];
+                DrawDDALine(hdc, p1, p2, RGB(192, 192, 192));
+            }
+
+            SelectObject(hdc, oldPen);
+            DeleteObject(grayPen);
+
+            // Clip and draw the result
+            ClipPolygonRect(hdc, points, pointCount, currentColor);
+
+            cout << "Polygon with " << pointCount << " vertices clipped against rectangle window" << endl;
             ReleaseDC(hwnd, hdc);
             pointCount = 0;
         }
@@ -1366,7 +1471,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         // Draw clipping window if using square clipping algorithms
         if (currentAlgorithm == ID_CLIP_SQUARE_POINT || currentAlgorithm == ID_CLIP_SQUARE_LINE) {
             DrawSquareClipWindow(hdc);
-        } else if (currentAlgorithm == ID_CLIP_RECT_POINT || currentAlgorithm == ID_CLIP_RECT_LINE) {
+        } else if (currentAlgorithm == ID_CLIP_RECT_POINT || currentAlgorithm == ID_CLIP_RECT_LINE || currentAlgorithm == ID_CLIP_RECT_POLYGON) {
             DrawRectClipWindow(hdc);
         }
 
