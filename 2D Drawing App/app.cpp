@@ -955,7 +955,7 @@ void FillQuarterWithLines(HDC hdc, int xc, int yc, int R, int quarter, COLORREF 
 
 void FillQuarterWithCircles(HDC hdc, int xc, int yc, int R, int quarter, COLORREF c)
 {
-    int smallR = 5;
+    int smallR = 1;
     for (int y = -R; y <= R; y += 2 * smallR) {
         for (int x = -R; x <= R; x += 2 * smallR) {
             if (x * x + y * y <= R * R) {
