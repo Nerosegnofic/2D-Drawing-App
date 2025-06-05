@@ -1360,6 +1360,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     FloodFillNonRecursive(hdc, points[0].x, points[0].y, bgColor, currentColor);
                     break;
             }
+            pointCount = 0;
         } else if (pointCount == 2 && (currentAlgorithm == ID_FILL_SQUARE_HERMIT || currentAlgorithm == ID_FILL_RECTANGLE_BEZIER)) {
             HDC hdc = GetDC(hwnd);
             switch(currentAlgorithm) {
