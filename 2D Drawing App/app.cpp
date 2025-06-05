@@ -7,9 +7,7 @@ using namespace std;
 
 // Command IDs
 enum MenuID {
-    ID_COLOR_RED = 1,
-    ID_COLOR_GREEN,
-    ID_COLOR_BLUE,
+    ID_COLOR_PICKER = 1,
     ID_CURSOR_ARROW,
     ID_CURSOR_CROSS,
     ID_CLEAR_SCREEN,
@@ -43,7 +41,7 @@ enum MenuID {
 };
 
 HBITMAP loadedBitmap = NULL;
-COLORREF currentColor = RGB(255, 0, 0);
+COLORREF currentColor = RGB(0, 0, 0);
 COLORREF bgColor = RGB(255, 255, 255);
 POINT points[200];
 int pointCount = 0;
@@ -112,6 +110,8 @@ void DrawDDALine(HDC hdc, POINT p1, POINT p2, COLORREF color) {
 
 // Initialize clipping window in the center of the screen
 void InitializeSquareClipWindow(HWND hwnd) {
+    cout << "Please input the size of the square clipping window: " << endl;
+    cin >> squareClipWindow.size;
     RECT rect;
     GetClientRect(hwnd, &rect);
     int width = rect.right - rect.left;
@@ -124,6 +124,8 @@ void InitializeSquareClipWindow(HWND hwnd) {
 }
 
 void InitializeRectClipWindow(HWND hwnd) {
+    cout << "Please input the width and height of the rectangle clipping window: " << endl;
+    cin >> rectClipWindow.width >> rectClipWindow.height;
     RECT rect;
     GetClientRect(hwnd, &rect);
     int screenWidth = rect.right - rect.left;
@@ -953,22 +955,49 @@ void FillQuarterWithLines(HDC hdc, int xc, int yc, int R, int quarter, COLORREF 
     }
 }
 
-void FillQuarterWithCircles(HDC hdc, int xc, int yc, int R, int quarter, COLORREF c)
-{
-    int smallR = 1;
-    for (int y = -R; y <= R; y += 2 * smallR) {
-        for (int x = -R; x <= R; x += 2 * smallR) {
-            if (x * x + y * y <= R * R) {
-                bool draw = false;
-                if (quarter == 1 && x >= 0 && y <= 0) draw = true;
-                else if (quarter == 2 && x <= 0 && y <= 0) draw = true;
-                else if (quarter == 3 && x <= 0 && y >= 0) draw = true;
-                else if (quarter == 4 && x >= 0 && y >= 0) draw = true;
-                POINT p;
-                p.x = xc + x;
-                p.y = yc + y;
-                if (draw) DrawModifiedMidpointCircle(hdc, p, smallR, c);
-            }
+void DrawDirectCircleQuarter(HDC hdc, POINT center, int radius, int q, COLORREF color) {
+    if (q == 1) {
+        int x = 0, y = radius;
+        int radiusSq = radius * radius;
+
+        while (abs(x) <= abs(y)) {
+            SetPixel(hdc, center.x + x, center.y - y, color);
+            SetPixel(hdc, center.x + y, center.y - x, color);
+            x++;
+            y = round(sqrt(radiusSq - x * x));
+        }
+    }
+    else if (q == 2) {
+        int x = 0, y = radius;
+        int radiusSq = radius * radius;
+
+        while (abs(x) <= radius) {
+            SetPixel(hdc, center.x - x, center.y - y, color);
+            SetPixel(hdc, center.x - y, center.y - x, color);
+            x++;
+            y = round(sqrt(radiusSq - x * x));
+        }
+    }
+    else if (q == 3) {
+        int x = 0, y = radius;
+        int radiusSq = radius * radius;
+
+        while (abs(x) <= radius) {
+            SetPixel(hdc, center.x - x, center.y + y, color);
+            SetPixel(hdc, center.x - y, center.y + x, color);
+            x++;
+            y = round(sqrt(radiusSq - x * x));
+        }
+    }
+    else if (q == 4) {
+        int x = 0, y = radius;
+        int radiusSq = radius * radius;
+
+        while (abs(x) <= radius) {
+            SetPixel(hdc, center.x + x, center.y + y, color);
+            SetPixel(hdc, center.x + y, center.y + x, color);
+            x++;
+            y = round(sqrt(radiusSq - x * x));
         }
     }
 }
@@ -1107,10 +1136,7 @@ void AddMenus(HWND hwnd) {
     HMENU hColor = CreateMenu(), hCursor = CreateMenu(), hLines = CreateMenu(), hCircles = CreateMenu();
     HMENU hFills = CreateMenu(), hClipping = CreateMenu(), hEllipse = CreateMenu();
 
-    // Color menu
-    AppendMenu(hColor, MF_STRING, ID_COLOR_RED, "Red");
-    AppendMenu(hColor, MF_STRING, ID_COLOR_GREEN, "Green");
-    AppendMenu(hColor, MF_STRING, ID_COLOR_BLUE, "Blue");
+    AppendMenu(hMain, MF_STRING, ID_COLOR_PICKER, "Color");
 
     // Cursor menu
     AppendMenu(hCursor, MF_STRING, ID_CURSOR_ARROW, "Arrow");
@@ -1149,7 +1175,6 @@ void AddMenus(HWND hwnd) {
     AppendMenu(hClipping, MF_STRING, ID_CLIP_SQUARE_LINE, "Clip Line (Square)");
 
     // Main menu organization
-    AppendMenu(hMain, MF_POPUP, (UINT_PTR)hColor, "Color");
     AppendMenu(hMain, MF_POPUP, (UINT_PTR)hCursor, "Cursor");
     AppendMenu(hMain, MF_POPUP, (UINT_PTR)hLines, "Line");
     AppendMenu(hMain, MF_POPUP, (UINT_PTR)hCircles, "Circle");
@@ -1168,9 +1193,23 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
-        case ID_COLOR_RED:   currentColor = RGB(255, 0, 0); break;
-        case ID_COLOR_GREEN: currentColor = RGB(0, 255, 0); break;
-        case ID_COLOR_BLUE:  currentColor = RGB(0, 0, 255); break;
+            case ID_COLOR_PICKER: {
+                CHOOSECOLOR cc;
+                static COLORREF customColors[16] = { 0 };
+                ZeroMemory(&cc, sizeof(cc));
+            
+                cc.lStructSize = sizeof(cc);
+                cc.hwndOwner = hwnd;
+                cc.lpCustColors = customColors;
+                cc.rgbResult = currentColor;
+                cc.Flags = CC_RGBINIT | CC_FULLOPEN;
+            
+                if (ChooseColor(&cc)) {
+                    currentColor = cc.rgbResult;
+                }
+                break;
+            }
+        
 
         case ID_CURSOR_ARROW:
             currentCursor = LoadCursor(NULL, IDC_ARROW);
@@ -1313,8 +1352,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         int quarter;
                         cout << "Enter the quarter you wanna fill: ";
                         cin >> quarter;
-                        if(quarter > 4 || quarter < 1) FillQuarterWithCircles(hdc, points[0].x, points[0].y, radius, 1, currentColor);
-                        else FillQuarterWithCircles(hdc, points[0].x, points[0].y, radius, quarter, currentColor);
+                        if(quarter > 4 || quarter < 1) while(radius--) DrawDirectCircleQuarter(hdc, points[0], radius, 1, currentColor);
+                        else while(radius--) DrawDirectCircleQuarter(hdc, points[0], radius, quarter, currentColor);
                         break;
                     }
                     case ID_FILL_CIRCLE_LINES: {
@@ -1360,6 +1399,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     FloodFillNonRecursive(hdc, points[0].x, points[0].y, bgColor, currentColor);
                     break;
             }
+            ReleaseDC(hwnd, hdc);
             pointCount = 0;
         } else if (pointCount == 2 && (currentAlgorithm == ID_FILL_SQUARE_HERMIT || currentAlgorithm == ID_FILL_RECTANGLE_BEZIER)) {
             HDC hdc = GetDC(hwnd);
